@@ -1,0 +1,10 @@
+# Backend ignores
+__pycache__/
+*.pyc
+datalyze.db
+.env
+
+# Frontend ignores
+node_modules/
+dist/
+.env.local

@@ -1,0 +1,6 @@
+Courier_ID,Transit_Time_Min,Cancel_Ratio,Culinary_Category,Dispatch_Frequency
+COUR-201,25,0.05,Pizza,14
+COUR-202,18,0.02,Burger,22
+COUR-203,35,0.12,Sushi,8
+COUR-204,15,0.00,Salad,30
+COUR-205,30,0.08,Asian,12

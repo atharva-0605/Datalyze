@@ -1,0 +1,240 @@
+
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>Workspace Analysis Report</title>
+        <style>
+            @page {
+                size: A4;
+                margin: 20mm;
+            }
+            body {
+                font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+                color: #2c3e50;
+                line-height: 1.6;
+                background-color: #f8fafc;
+                margin: 0;
+                padding: 0;
+            }
+            .header-container {
+                background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+                color: #ffffff;
+                padding: 30px;
+                border-radius: 12px;
+                margin-bottom: 30px;
+            }
+            h1 {
+                margin: 0 0 10px 0;
+                font-size: 28px;
+                font-weight: 700;
+            }
+            .subtitle {
+                font-size: 16px;
+                opacity: 0.9;
+                margin: 0;
+            }
+            .meta-grid {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 15px;
+                margin-top: 20px;
+                border-top: 1px solid rgba(255, 255, 255, 0.2);
+                padding-top: 15px;
+                font-size: 14px;
+            }
+            .card {
+                background: #ffffff;
+                border: 1px solid #e2e8f0;
+                border-radius: 10px;
+                padding: 20px;
+                margin-bottom: 25px;
+            }
+            .card-title {
+                font-size: 18px;
+                font-weight: 600;
+                color: #1e3c72;
+                margin-top: 0;
+                margin-bottom: 15px;
+                border-bottom: 2px solid #e2e8f0;
+                padding-bottom: 8px;
+            }
+            .score-container {
+                display: flex;
+                align-items: center;
+                margin-bottom: 20px;
+            }
+            .score-badge {
+                font-size: 32px;
+                font-weight: 700;
+                color: #ffffff;
+                background-color: #22c55e;
+                padding: 8px 18px;
+                border-radius: 8px;
+                display: inline-block;
+                margin-right: 20px;
+            }
+            .stats-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin: 15px 0;
+            }
+            .stats-table th, .stats-table td {
+                padding: 10px 12px;
+                text-align: left;
+                border-bottom: 1px solid #e2e8f0;
+            }
+            .stats-table th {
+                background-color: #f1f5f9;
+                color: #475569;
+                font-weight: 600;
+            }
+            .bullet-list {
+                padding-left: 20px;
+                margin: 10px 0;
+            }
+            .bullet-list li {
+                margin-bottom: 8px;
+            }
+            .footer {
+                text-align: center;
+                font-size: 12px;
+                color: #94a3b8;
+                margin-top: 50px;
+                border-top: 1px solid #e2e8f0;
+                padding-top: 15px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="header-container">
+            <h1>Workspace Analysis Report</h1>
+            <p class="subtitle">Automated Data Quality & Diagnostics Report</p>
+            <div class="meta-grid">
+                <div><strong>Dataset Name:</strong> healed_large_corrupted_dataset.csv</div>
+                <div><strong>Workspace ID:</strong> Workspace 2</div>
+                <div><strong>Generated At:</strong> 2026-07-04 17:00:08 UTC</div>
+                <div><strong>File Size:</strong> 0.94 KB</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">Data Health Summary</div>
+            <div class="score-container">
+                <span class="score-badge">100.0 / 100</span>
+                <div>
+                    <strong>Data Integrity Rating:</strong> 
+                     Excellent
+                    
+                </div>
+            </div>
+            
+            <table class="stats-table">
+                <thead>
+                    <tr>
+                        <th>Metric</th>
+                        <th>Value</th>
+                        <th>Percentage</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Total Rows</td>
+                        <td>23</td>
+                        <td>100%</td>
+                    </tr>
+                    <tr>
+                        <td>Total Columns</td>
+                        <td>5</td>
+                        <td>-</td>
+                    </tr>
+                    <tr>
+                        <td>Missing Cells</td>
+                        <td>0</td>
+                        <td>0.0%</td>
+                    </tr>
+                    <tr>
+                        <td>Duplicate Rows</td>
+                        <td>0</td>
+                        <td>0.0%</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <div class="card-title">Column Details</div>
+            <table class="stats-table">
+                <thead>
+                    <tr>
+                        <th>Column Name</th>
+                        <th>Datatype</th>
+                        <th>Missing Count</th>
+                        <th>Mismatches</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    
+                    <tr>
+                        <td><strong>Total_Revenue</strong></td>
+                        <td><code>float64</code></td>
+                        <td>0 (0.0%)</td>
+                        <td>0</td>
+                    </tr>
+                    
+                    <tr>
+                        <td><strong>Quantity</strong></td>
+                        <td><code>float64</code></td>
+                        <td>0 (0.0%)</td>
+                        <td>0</td>
+                    </tr>
+                    
+                    <tr>
+                        <td><strong>Gross_Income</strong></td>
+                        <td><code>float64</code></td>
+                        <td>0 (0.0%)</td>
+                        <td>0</td>
+                    </tr>
+                    
+                    <tr>
+                        <td><strong>Date</strong></td>
+                        <td><code>object</code></td>
+                        <td>0 (0.0%)</td>
+                        <td>0</td>
+                    </tr>
+                    
+                    <tr>
+                        <td><strong>Branch</strong></td>
+                        <td><code>object</code></td>
+                        <td>0 (0.0%)</td>
+                        <td>0</td>
+                    </tr>
+                    
+                </tbody>
+            </table>
+        </div>
+
+        
+        <div class="card">
+            <div class="card-title">Recommended Actions</div>
+            <ul class="bullet-list">
+                
+                <li>Dataset is in perfect health! No corrections needed.</li>
+                
+            </ul>
+        </div>
+        
+
+        
+        <div class="card">
+            <div class="card-title">Analyst Notes</div>
+            <p>Auto-generated workspace report log.</p>
+        </div>
+        
+
+        <div class="footer">
+            Generated by Datalyze AI. Powered by FastAPI, Pandas & WeasyPrint.
+        </div>
+    </body>
+    </html>
+    

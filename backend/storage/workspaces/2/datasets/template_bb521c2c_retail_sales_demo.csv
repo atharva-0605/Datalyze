@@ -1,0 +1,6 @@
+Invoice_ID,Branch,City,Customer_Type,Gender,Product_Line,Unit_Price,Quantity,Tax_5,Total_Revenue,Date,Time,Payment,COGS,Gross_Margin_Percentage,Gross_Income,Rating
+INV-1001,A,Yangon,Member,Female,Fashion,45.5,3,6.82,143.32,2026-03-01,13:00,Credit card,136.5,4.76,6.82,7.5
+INV-1002,B,Mandalay,Normal,Male,Electronic,85.0,2,8.5,178.5,2026-03-02,14:30,Cash,170.0,4.76,8.5,8.0
+INV-1003,A,Yangon,Normal,Female,Home,30.0,5,7.5,157.5,2026-03-03,10:15,Ewallet,150.0,4.76,7.5,6.8
+INV-1004,C,Naypyitaw,Member,Male,Sports,55.0,4,11.0,231.0,2026-03-04,18:00,Cash,220.0,4.76,11.0,9.2
+INV-1005,A,Yangon,Member,Female,Food,20.0,10,10.0,210.0,2026-03-05,12:45,Credit card,200.0,4.76,10.0,7.0
