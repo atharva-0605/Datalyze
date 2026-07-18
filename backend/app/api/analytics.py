@@ -96,13 +96,25 @@ async def get_narrative(
     # Hook into narrative generation pathway to save directly to the insights table
     try:
         from app.models.insight import Insight
-        db_insight = Insight(
-            workspace_id=workspace_id,
-            upload_id=None,
-            narrative_text=narrative,
-            source_type="PREDICTIVE_CANVAS"
-        )
-        db.add(db_insight)
+        from datetime import datetime, timezone
+        
+        # Search for existing insight matching the active workspace_id
+        stmt = select(Insight).where(Insight.workspace_id == workspace_id).limit(1)
+        res = await db.execute(stmt)
+        db_insight = res.scalars().first()
+        
+        if db_insight:
+            db_insight.narrative_text = narrative
+            db_insight.source_type = "PREDICTIVE_CANVAS"
+            db_insight.created_at = datetime.now(timezone.utc)
+        else:
+            db_insight = Insight(
+                workspace_id=workspace_id,
+                upload_id=None,
+                narrative_text=narrative,
+                source_type="PREDICTIVE_CANVAS"
+            )
+            db.add(db_insight)
         await db.commit()
     except Exception as save_err:
         import logging

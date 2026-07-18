@@ -27,7 +27,19 @@ async def register(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
         )
 
     # Resolve workspace (multi-tenant structure)
-    workspace_id = None
+    # First save the user to database so they get an ID assigned
+    hashed_pw = get_password_hash(user_in.password)
+    new_user = User(
+        email=user_in.email,
+        hashed_password=hashed_pw,
+        role=user_in.role,
+        workspace_id=None,
+    )
+    db.add(new_user)
+    await db.commit()
+    await db.refresh(new_user)
+
+    # Spin up a clean initial default workspace owned by this user if workspace_id not explicitly provided
     if user_in.workspace_id is not None:
         workspace_result = await db.execute(
             select(Workspace).where(Workspace.id == user_in.workspace_id)
@@ -38,18 +50,20 @@ async def register(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Workspace with ID {user_in.workspace_id} not found."
             )
-        workspace_id = workspace.id
+        new_user.workspace_id = workspace.id
+        await db.commit()
+        await db.refresh(new_user)
+    else:
+        ws_name = user_in.workspace_name or "My First Workspace"
+        db_workspace = Workspace(name=ws_name, owner_id=new_user.id)
+        db.add(db_workspace)
+        await db.commit()
+        await db.refresh(db_workspace)
+        
+        new_user.workspace_id = db_workspace.id
+        await db.commit()
+        await db.refresh(new_user)
 
-    hashed_pw = get_password_hash(user_in.password)
-    new_user = User(
-        email=user_in.email,
-        hashed_password=hashed_pw,
-        role=user_in.role,
-        workspace_id=workspace_id,
-    )
-    db.add(new_user)
-    await db.commit()
-    await db.refresh(new_user)
     return new_user
 
 @router.post("/login", response_model=Token)
@@ -71,6 +85,15 @@ async def login(
             status_code=status.HTTP_400_BAD_REQUEST, 
             detail="Inactive user account"
         )
+        
+    if user.workspace_id is None:
+        workspace_result = await db.execute(
+            select(Workspace).where(Workspace.id == 1)
+        )
+        default_workspace = workspace_result.scalars().first()
+        if default_workspace:
+            user.workspace_id = 1
+            await db.commit()
         
     access_token = create_access_token(subject=user.email)
     return Token(access_token=access_token, token_type="bearer")

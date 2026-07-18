@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, datasets, reports, health, widgets, workspaces, analytics, query, monitor, schema_mapper, insights, templates, integrations, digest
+from app.api.v1.endpoints import auth, datasets, reports, health, widgets, workspaces, analytics, query, monitor, schema_mapper, insights, templates, integrations, digest, dashboard
 
 api_router = APIRouter()
 
@@ -17,3 +17,4 @@ api_router.include_router(insights.router, prefix="/insights", tags=["Insights &
 api_router.include_router(templates.router, prefix="/templates", tags=["Marketplace Templates"])
 api_router.include_router(integrations.router, prefix="/integrations", tags=["Workspace Integrations"])
 api_router.include_router(digest.router, prefix="/digest", tags=["User Digest"])
+api_router.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])

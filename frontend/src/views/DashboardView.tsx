@@ -58,7 +58,6 @@ import {
   FileText,
   ChevronRight,
   Download,
-  FileSpreadsheet,
   Mic
 } from 'lucide-react';
 
@@ -324,7 +323,7 @@ export const DashboardView: React.FC = () => {
 
   const [narratives, setNarratives] = useState<Record<string, string>>({});
   const [narrativesLoading, setNarrativesLoading] = useState<boolean>(false);
-  const [showBiModal, setShowBiModal] = useState<boolean>(false);
+  const [activeBranchFilter, setActiveBranchFilter] = useState<string | null>(null);
   const [insightsVisible, setInsightsVisible] = useState<boolean>(false);
   const [kpiLabels, setKpiLabels] = useState({ sales: "Total Sales Volume", profit: "Gross Profit", tax: "Tax (VAT 5%)" });
 
@@ -467,6 +466,7 @@ export const DashboardView: React.FC = () => {
       
       // Clear filters on dataset change
       setActiveFilter(null);
+      setActiveBranchFilter(null);
     }
   }, [selectedDatasetUuid, getDatasetRecords, getAiSummary]);
 
@@ -760,12 +760,13 @@ export const DashboardView: React.FC = () => {
     }
   };
 
-  // Toggle filter logic
   const toggleFilter = (column: string, value: any) => {
     if (activeFilter && activeFilter.column === column && activeFilter.value === value) {
       setActiveFilter(null);
+      setActiveBranchFilter(null);
     } else {
       setActiveFilter({ column, value });
+      setActiveBranchFilter(String(value));
     }
   };
 
@@ -775,25 +776,37 @@ export const DashboardView: React.FC = () => {
     return records.filter(row => String(row[activeFilter.column]) === String(activeFilter.value));
   }, [records, activeFilter]);
 
-  // Dynamic KPI math calculations
-  const kpis = useMemo(() => {
-    if (records.length === 0) return { totalSales: 0, totalProfit: 0, totalTax: 0 };
-    
+  const branchColName = useMemo(() => {
+    if (records.length === 0) return 'Branch';
+    const keys = Object.keys(records[0]);
+    return keys.find(k => k.toLowerCase() === 'branch' || k.toLowerCase().includes('branch') || k.toLowerCase() === 'city') || keys[0] || 'branch';
+  }, [records]);
+
+  const filteredData = useMemo(() => {
+    if (!activeBranchFilter) return records;
+    return records.filter(item => String(item[branchColName]) === activeBranchFilter);
+  }, [records, activeBranchFilter, branchColName]);
+
+  const totalSalesValue = useMemo(() => {
     const growthFactor = 1 + growthRate / 100;
     const attritionFactor = 1 - attritionRate / 100;
+    const sum = filteredData.reduce((sum, item) => sum + (Number(item[totalCol]) || 0), 0);
+    return Math.round(sum * growthFactor * attritionFactor);
+  }, [filteredData, totalCol, growthRate, attritionRate]);
 
-    let targetRecords = filteredRecords;
-    
-    const salesRaw = targetRecords.reduce((acc, row) => acc + (row ? (Number(row[totalCol]) || 0) : 0), 0);
-    const profitRaw = targetRecords.reduce((acc, row) => acc + (row ? (Number(row[profitCol]) || 0) : 0), 0);
-    const taxRaw = targetRecords.reduce((acc, row) => acc + (row ? (Number(row[taxCol]) || 0) : 0), 0);
+  const grossProfitValue = useMemo(() => {
+    const growthFactor = 1 + growthRate / 100;
+    const attritionFactor = 1 - attritionRate / 100;
+    const sum = filteredData.reduce((sum, item) => sum + (Number(item[profitCol]) || 0), 0);
+    return Math.round(sum * growthFactor * attritionFactor);
+  }, [filteredData, profitCol, growthRate, attritionRate]);
 
-    return {
-      totalSales: Math.round(salesRaw * growthFactor * attritionFactor),
-      totalProfit: Math.round(profitRaw * growthFactor * attritionFactor),
-      totalTax: Math.round(taxRaw * growthFactor * attritionFactor)
-    };
-  }, [records, filteredRecords, growthRate, attritionRate, totalCol, profitCol, taxCol]);
+  const totalTaxValue = useMemo(() => {
+    const growthFactor = 1 + growthRate / 100;
+    const attritionFactor = 1 - attritionRate / 100;
+    const sum = filteredData.reduce((sum, item) => sum + (Number(item[taxCol]) || 0), 0);
+    return Math.round(sum * growthFactor * attritionFactor);
+  }, [filteredData, taxCol, growthRate, attritionRate]);
 
   // Widget interaction update handlers
   const removeWidget = (id: string) => {
@@ -1577,131 +1590,31 @@ export const DashboardView: React.FC = () => {
     }
   };
 
-  const handleExportBi = async () => {
+  const handleDownloadCSV = async () => {
     if (!selectedDatasetUuid || !activeWorkspaceId) return;
     try {
-      const forecastStr = forecastProjection.join(',');
-      const baselineStr = forecastWhatIf.join(',');
-      
-      const response = await axios.get('/api/v1/reports/export-bi', {
-        params: {
-          dataset_uuid: selectedDatasetUuid,
-          total_sales: kpis.totalSales,
-          total_profit: kpis.totalProfit,
-          total_tax: kpis.totalTax,
-          forecast_projection: forecastStr,
-          what_if_baseline: baselineStr
-        },
+      const token = localStorage.getItem('token');
+      const response = await axios.get('/api/v1/dashboard/download-csv', {
+        params: { dataset_uuid: selectedDatasetUuid },
         headers: {
+          'Authorization': `Bearer ${token}`,
           'X-Workspace-ID': activeWorkspaceId
         },
         responseType: 'blob'
       });
-      
-      const contentType = String(response.headers['content-type'] || 'application/octet-stream');
-      const blob = new Blob([response.data], { type: contentType });
+      const blob = new Blob([response.data], { type: 'text/csv' });
       const downloadUrl = window.URL.createObjectURL(blob);
-      
       const link = document.createElement('a');
       link.href = downloadUrl;
-      const cleanFilename = encodeURIComponent(activeDataset?.filename.split('.')[0] || 'Dataset');
-      link.setAttribute('download', `Datalyze_Presentation_${cleanFilename}.pbix`);
+      link.setAttribute('download', 'healed_dataset.csv');
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.URL.revokeObjectURL(downloadUrl);
-      
-      // Open quick presentation guide modal
-      setShowBiModal(true);
-    } catch (err) {
-      console.error('Failed to export BI file:', err);
-      alert('Failed to generate Power BI presentation file. Ensure backend template is placed correctly.');
+    } catch (err: any) {
+      console.error('Failed to download healed CSV:', err);
+      alert('Failed to download healed CSV: ' + (err.message || 'Server error.'));
     }
-  };
-
-  const handleExportHtml = () => {
-    const canvas = document.getElementById('dashboard-reporting-canvas');
-    if (!canvas) {
-      alert('Could not find dashboard presentation elements to export.');
-      return;
-    }
-    
-    // Clone and sanitize elements for offline layout
-    const clone = canvas.cloneNode(true) as HTMLElement;
-    
-    // Remove headers, controls, and buttons that shouldn't display in presentation
-    const noExportElements = clone.querySelectorAll('.no-export, button, select, input[type="range"]');
-    noExportElements.forEach(el => el.remove());
-    
-    // Convert editable inputs to span values so they render properly as static text
-    const inputs = clone.querySelectorAll('input[type="text"]');
-    inputs.forEach(inputEl => {
-      const val = (inputEl as HTMLInputElement).value;
-      const span = document.createElement('span');
-      span.className = inputEl.className;
-      span.textContent = val;
-      inputEl.replaceWith(span);
-    });
-    
-    const dashboardHtml = clone.innerHTML;
-    
-    const fullHtml = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Datalyze - Interactive Boardroom Presentation</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            brand: {
-              teal: '#0d9488',
-              emerald: '#10b981'
-            }
-          }
-        }
-      }
-    }
-  </script>
-  <style>
-    body { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background-color: #f8fafc; }
-    .recharts-legend-wrapper { pointer-events: none; }
-    svg { max-width: 100%; height: auto; }
-  </style>
-</head>
-<body class="p-8 bg-slate-50">
-  <div class="max-w-7xl mx-auto space-y-6">
-    <div class="flex justify-between items-center border-b border-slate-200 pb-4 mb-6 no-export">
-      <div>
-        <h1 class="text-lg font-bold text-slate-800 tracking-tight flex items-center gap-1.5">
-          <span class="bg-brand-teal text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">PRO</span>
-          <span>Datalyze Boardroom Export</span>
-        </h1>
-        <p class="text-[10px] text-slate-400">Offline interactive dashboard presentation package</p>
-      </div>
-      <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-widest">Confidential / Boardroom Ready</span>
-    </div>
-    
-    <div class="space-y-8">
-      ${dashboardHtml}
-    </div>
-  </div>
-</body>
-</html>`;
-
-    const blob = new Blob([fullHtml], { type: 'text/html' });
-    const downloadUrl = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    const cleanFilename = encodeURIComponent(activeDataset?.filename.split('.')[0] || 'Presentation');
-    link.setAttribute('download', `Presentation_${cleanFilename}.html`);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(downloadUrl);
   };
 
   const handleRevertSimulation = async () => {
@@ -1712,6 +1625,7 @@ export const DashboardView: React.FC = () => {
     setForecastProjection([]);
     setForecastWhatIf([]);
     setActiveFilter(null); // clear filters too for clean revert
+    setActiveBranchFilter(null);
     setKpiLabels({ sales: "Total Sales Volume", profit: "Gross Profit", tax: "Tax (VAT 5%)" });
     
     if (selectedDatasetUuid) {
@@ -2172,30 +2086,12 @@ export const DashboardView: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={handleExportHtml}
+                onClick={handleDownloadCSV}
                 className="flex items-center space-x-1.5 px-3.5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg transition-all shadow-sm cursor-pointer"
-                title="Export entire dashboard to a self-contained interactive offline HTML page"
+                title="Download the operational data metrics in a clean CSV format"
               >
-                <Tv className="h-4 w-4" />
-                <span>Export to Offline Presentation</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowPptxModal(true)}
-                className="flex items-center space-x-1.5 px-3.5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-bold text-xs rounded-lg transition-all shadow-sm cursor-pointer"
-                title="Compile dashboard metrics into presentable corporate slide deck (PPTX)"
-              >
-                <Tv className="h-4 w-4" />
-                <span>Auto-Generate Executive Presentation</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowBiModal(true)}
-                className="flex items-center space-x-1.5 px-3.5 py-2.5 bg-slate-600 hover:bg-slate-700 text-white font-bold text-xs rounded-lg transition-all shadow-sm cursor-pointer"
-                title="Power BI Data Export & Integration Guide"
-              >
-                <FileSpreadsheet className="h-4 w-4" />
-                <span>Power BI Data Hub</span>
+                <Download className="h-4 w-4" />
+                <span>Download Healed CSV</span>
               </button>
             </div>
           )}
@@ -2261,9 +2157,9 @@ export const DashboardView: React.FC = () => {
                     className="bg-transparent border-none focus:outline-none focus:ring-1 focus:ring-amber-500 font-bold uppercase tracking-wider text-amber-700 cursor-pointer w-full text-[10px]"
                   />
                 </span>
-                <span className="text-2xl font-black text-amber-900 tracking-tight block mt-1">
-                  ${kpis.totalSales.toLocaleString()}
-                </span>
+                <h3 className="text-2xl font-black text-amber-900 tracking-tight block mt-1">
+                  ${totalSalesValue.toLocaleString()}
+                </h3>
               </div>
               
               <div className="flex-1 min-w-[120px] border-r border-amber-200/80 pr-6">
@@ -2276,9 +2172,9 @@ export const DashboardView: React.FC = () => {
                     className="bg-transparent border-none focus:outline-none focus:ring-1 focus:ring-amber-500 font-bold uppercase tracking-wider text-amber-700 cursor-pointer w-full text-[10px]"
                   />
                 </span>
-                <span className="text-2xl font-black text-amber-900 tracking-tight block mt-1">
-                  ${kpis.totalProfit.toLocaleString()}
-                </span>
+                <h3 className="text-2xl font-black text-amber-900 tracking-tight block mt-1">
+                  ${grossProfitValue.toLocaleString()}
+                </h3>
               </div>
               
               <div className="flex-1 min-w-[120px]">
@@ -2291,9 +2187,9 @@ export const DashboardView: React.FC = () => {
                     className="bg-transparent border-none focus:outline-none focus:ring-1 focus:ring-amber-500 font-bold uppercase tracking-wider text-amber-700 cursor-pointer w-full text-[10px]"
                   />
                 </span>
-                <span className="text-2xl font-black text-amber-900 tracking-tight block mt-1">
-                  ${kpis.totalTax.toLocaleString()}
-                </span>
+                <h3 className="text-2xl font-black text-amber-900 tracking-tight block mt-1">
+                  ${totalTaxValue.toLocaleString()}
+                </h3>
               </div>
             </div>
 
@@ -2401,7 +2297,10 @@ export const DashboardView: React.FC = () => {
                 </span>
               </div>
               <button
-                onClick={() => setActiveFilter(null)}
+                onClick={() => {
+                  setActiveFilter(null);
+                  setActiveBranchFilter(null);
+                }}
                 className="bg-white border border-brand-teal/20 hover:bg-brand-teal hover:text-white px-2.5 py-1 rounded text-[10px] font-bold transition-all cursor-pointer"
               >
                 Clear Filter [X]
@@ -2996,53 +2895,6 @@ export const DashboardView: React.FC = () => {
         </div>
       )}
 
-      {/* Power BI Quick Presentation Guide Modal */}
-      {showBiModal && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn no-export">
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 max-w-md w-full shadow-xl space-y-4 relative">
-            <button
-              onClick={() => setShowBiModal(false)}
-              className="absolute right-4 top-4 text-slate-400 hover:text-slate-650 font-bold"
-            >
-              ✕
-            </button>
-            <div className="flex items-center space-x-2.5 text-blue-600 border-b border-slate-100 pb-3">
-              <FileSpreadsheet className="h-5 w-5" />
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                Power BI Integration Guide
-              </h4>
-            </div>
-            <div className="space-y-3.5 text-xs text-slate-600 leading-relaxed">
-              <p>Opens natively in Power BI Desktop with fully functional interactive charts, ready to present to stakeholders.</p>
-              
-              <div className="flex justify-center pb-2">
-                <button
-                  onClick={handleExportBi}
-                  className="flex items-center space-x-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg transition-all shadow-sm cursor-pointer w-full justify-center"
-                >
-                  <Download className="h-4 w-4" />
-                  <span>Download Power BI Presentation Dashboard (.PBIX)</span>
-                </button>
-              </div>
-
-              <div className="bg-slate-50 p-3 rounded-lg border border-slate-150 space-y-2">
-                <span className="font-bold text-[9px] text-slate-500 uppercase tracking-wider block">
-                  How to Use:
-                </span>
-                <ol className="list-decimal list-inside space-y-1 text-slate-650">
-                  <li>Double-click the downloaded <code>Datalyze_Presentation_*.pbix</code> file.</li>
-                  <li>Power BI Desktop will open the pre-configured visual canvas.</li>
-                  <li>Click on <strong>Refresh</strong> in the Home ribbon tab.</li>
-                  <li>Power BI will reload original records, editable metrics, and forecasts instantly!</li>
-                </ol>
-              </div>
-              <p className="text-[9px] text-slate-400 italic">
-                Note: Power BI retrieves data from the stable connection path at <code>./tmp/BI_Export_Dashboard.xlsx</code>.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* PowerPoint slide builder modal */}
       {showPptxModal && (

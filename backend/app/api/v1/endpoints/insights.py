@@ -50,8 +50,8 @@ class GenerateReportRequest(BaseModel):
 
 @router.get("/", response_model=List[InsightRead])
 async def list_insights(
+    workspace_id: int,
     current_user: User = Depends(get_current_user),
-    workspace_id: int = Depends(get_current_workspace_id),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -63,8 +63,8 @@ async def list_insights(
 
 @router.get("/reports", response_model=List[ReportRead])
 async def list_reports(
+    workspace_id: int,
     current_user: User = Depends(get_current_user),
-    workspace_id: int = Depends(get_current_workspace_id),
     db: AsyncSession = Depends(get_db)
 ):
     """

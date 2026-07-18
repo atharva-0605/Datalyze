@@ -37,7 +37,7 @@ export const AuthView: React.FC = () => {
       } else {
         await register(email, password, workspaceName || undefined, role);
       }
-      navigate('/dashboard');
+      navigate('/guide');
     } catch (err) {
       // API validation errors are managed and updated by AuthContext state
     } finally {

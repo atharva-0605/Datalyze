@@ -198,54 +198,106 @@ async def export_bi_report(
             for v in all_visuals:
                 config_str = v.get("config", "{}")
                 v_type = None
+                config = {}
                 try:
                     config = json.loads(config_str)
                     v_type = config.get("singleVisual", {}).get("visualType")
                 except Exception:
                     pass
+                
+                # Filter to only the 4 required quantitative graphs
+                if v_type not in ["columnChart", "lineClusteredColumnComboChart", "lineChart", "pieChart"]:
+                    continue
+                
+                # Customize properties in the config
+                try:
+                    sv = config.setdefault("singleVisual", {})
+                    vc_objects = sv.setdefault("vcObjects", {})
                     
-                # Reconstruct visual layout coordinates matching three-row application structure
-                if v_type == "map":
-                    # Executive KPI Summary Ribbon (Row 1)
+                    # 1. Title and fontFamily alignment
+                    title_text = ""
+                    if v_type == "columnChart":
+                        title_text = "Total by Branch"
+                    elif v_type == "lineClusteredColumnComboChart":
+                        title_text = "Profit & Tax Combo Chart"
+                    elif v_type == "lineChart":
+                        title_text = "Temporal Sales Trend"
+                    elif v_type == "pieChart":
+                        title_text = "Smart City Quantity Donut Chart"
+                        
+                    if title_text:
+                        vc_objects["title"] = [
+                            {
+                                "properties": {
+                                    "text": {
+                                        "expr": {
+                                            "Literal": {
+                                                "Value": f"'{title_text}'"
+                                            }
+                                        }
+                                    },
+                                    "fontFamily": {
+                                        "expr": {
+                                            "Literal": {
+                                                "Value": "'Segoe UI Semibold'"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        ]
+                    
+                    # 2. Desaturated corporate blue theme color (#3b82f6)
+                    vc_objects["dataPoint"] = [
+                        {
+                            "properties": {
+                                "fill": {
+                                    "solid": {
+                                        "color": {
+                                            "expr": {
+                                                "Literal": {
+                                                    "Value": "'#3b82f6'"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    ]
+                    
+                    v["config"] = json.dumps(config)
+                except Exception:
+                    pass
+                
+                # Position coordinates according to 2x2 four-quadrant system
+                if v_type == "columnChart":
+                    # Top Left
                     v["x"] = 20
                     v["y"] = 20
-                    v["width"] = 1240
-                    v["height"] = 140
-                    new_visuals.append(v)
-                elif v_type == "columnChart":
-                    # Row 2 Left Panel (Total by Branch column chart)
-                    v["x"] = 20
-                    v["y"] = 180
-                    v["width"] = 600
-                    v["height"] = 360
+                    v["width"] = 610
+                    v["height"] = 450
                     new_visuals.append(v)
                 elif v_type == "lineClusteredColumnComboChart":
-                    # Row 2 Right Panel (Profit & Tax Combo Chart)
-                    v["x"] = 640
-                    v["y"] = 180
-                    v["width"] = 620
-                    v["height"] = 360
+                    # Top Right
+                    v["x"] = 650
+                    v["y"] = 20
+                    v["width"] = 610
+                    v["height"] = 450
                     new_visuals.append(v)
                 elif v_type == "lineChart":
-                    # Row 3 Lower Left (Total Sales Trend by Date Line Chart)
+                    # Bottom Left
                     v["x"] = 20
-                    v["y"] = 560
-                    v["width"] = 600
-                    v["height"] = 360
+                    v["y"] = 490
+                    v["width"] = 610
+                    v["height"] = 450
                     new_visuals.append(v)
                 elif v_type == "pieChart":
-                    # Row 3 Lower Right (Quantity by City Donut Visual)
-                    v["x"] = 640
-                    v["y"] = 560
-                    v["width"] = 620
-                    v["height"] = 360
-                    new_visuals.append(v)
-                else:
-                    # Place extra or unmapped visuals offscreen
-                    v["x"] = -1000
-                    v["y"] = -1000
-                    v["width"] = 0
-                    v["height"] = 0
+                    # Bottom Right
+                    v["x"] = 650
+                    v["y"] = 490
+                    v["width"] = 610
+                    v["height"] = 450
                     new_visuals.append(v)
                     
             section["visualContainers"] = new_visuals

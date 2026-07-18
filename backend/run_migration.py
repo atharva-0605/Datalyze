@@ -1,197 +1,112 @@
 import os
 import sqlite3
 import logging
+import shutil
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("migration")
 
+def purge_local_storage():
+    """
+    Automated startup utility hook to clear out leftover dynamic files in emails,
+    uploads, and user workspace folders while keeping folder structures intact.
+    """
+    logger.info("Purging temporary asset folders and test outputs...")
+    
+    # 1. Clear backend/storage/emails/
+    emails_dir = "storage/emails"
+    if not os.path.exists(emails_dir):
+        emails_dir = "backend/storage/emails"
+    if os.path.exists(emails_dir):
+        for item in os.listdir(emails_dir):
+            item_path = os.path.join(emails_dir, item)
+            try:
+                if os.path.isdir(item_path):
+                    shutil.rmtree(item_path)
+                else:
+                    os.remove(item_path)
+            except Exception as e:
+                logger.warning(f"Failed to delete {item_path}: {e}")
+
+    # 2. Clear backend/storage/uploads/
+    uploads_dir = "storage/uploads"
+    if not os.path.exists(uploads_dir):
+        uploads_dir = "backend/storage/uploads"
+    if os.path.exists(uploads_dir):
+        for item in os.listdir(uploads_dir):
+            item_path = os.path.join(uploads_dir, item)
+            try:
+                if os.path.isdir(item_path):
+                    shutil.rmtree(item_path)
+                else:
+                    os.remove(item_path)
+            except Exception as e:
+                logger.warning(f"Failed to delete {item_path}: {e}")
+
+    # 3. Clear workspace directories (e.g. backend/storage/workspace_*)
+    storage_dir = "storage"
+    if not os.path.exists(storage_dir):
+        storage_dir = "backend/storage"
+    if os.path.exists(storage_dir):
+        for item in os.listdir(storage_dir):
+            if item.startswith("workspace_") or item == "workspaces" or item == "exports":
+                item_path = os.path.join(storage_dir, item)
+                try:
+                    shutil.rmtree(item_path)
+                except Exception as e:
+                    logger.warning(f"Failed to delete workspace/export folder {item_path}: {e}")
+
+    # 4. Clear test_output.pbix
+    for root_dir in [".", "backend"]:
+        pbix_path = os.path.join(root_dir, "test_output.pbix")
+        if os.path.exists(pbix_path):
+            try:
+                os.remove(pbix_path)
+                logger.info(f"Removed leftover file: {pbix_path}")
+            except Exception as e:
+                logger.warning(f"Failed to delete {pbix_path}: {e}")
+
 def run_db_migration():
     db_path = "datalyze.db"
-    if not os.path.exists(db_path):
-        logger.warning(f"Database file '{db_path}' not found. Skipping migration updates.")
-        return
+    
+    # 1. Purge storage files first
+    purge_local_storage()
 
-    logger.info(f"Connecting to database at {db_path} to perform migration...")
+    # 2. Flush SQLite Database State completely
+    logger.info("Flushing SQLite Database State completely via SQLAlchemy metadata...")
+    import asyncio
+    from app.core.database import engine
+    from app.models.base import Base
+    
+    # Import all models to ensure they are registered on the Base metadata
+    from app.models.workspace import Workspace
+    from app.models.user import User
+    from app.models.dataset import Dataset
+    from app.models.widget import Widget
+    from app.models.anomaly import AnomalyExplanation
+    from app.models.chat_session import AnalystChatSession
+    from app.models.canvas import CanvasComment
+    from app.models.report import ExecutiveReport
+    from app.models.monitor import DatasetFingerprint
+    from app.models.schema_mapper import SchemaMapping
+    from app.models.insight import Insight, Report
+    from app.models.integration import Integration
+    from app.models.template import Template
+
+    async def reset_tables():
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+            await conn.run_sync(Base.metadata.create_all)
+
+    asyncio.run(reset_tables())
+    logger.info("Database structural tables dropped and re-created successfully (blank state).")
+
+    # 3. Connect to database at datalyze.db to seed templates
+    logger.info(f"Connecting to database at {db_path} to seed marketplace templates...")
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
     try:
-        # 1. Create workspaces table if not exists
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS workspaces (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name VARCHAR(255) NOT NULL,
-            owner_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        """)
-        
-        # 2. Create widgets table with workspace_id foreign key & index
-        logger.info("Creating widgets table and indexing workspace_id...")
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS widgets (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            uuid VARCHAR(36) UNIQUE,
-            title VARCHAR(255) NOT NULL,
-            type VARCHAR(50) NOT NULL,
-            xAxisColumn VARCHAR(255),
-            yAxisColumn VARCHAR(255),
-            xAxisKey VARCHAR(255),
-            yAxisKey VARCHAR(255),
-            showLabels BOOLEAN DEFAULT 1,
-            showGrid BOOLEAN DEFAULT 1,
-            smooth BOOLEAN DEFAULT 0,
-            colorPalette VARCHAR(50) DEFAULT 'blue',
-            workspace_id INTEGER NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
-        );
-        """)
-        
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_widgets_workspace_id ON widgets(workspace_id);")
-
-        # 3. Add workspace_id column to datasets if missing
-        cursor.execute("PRAGMA table_info(datasets)")
-        columns = [col[1] for col in cursor.fetchall()]
-        if "workspace_id" not in columns:
-            logger.info("Adding workspace_id column to datasets table...")
-            cursor.execute("ALTER TABLE datasets ADD COLUMN workspace_id INTEGER REFERENCES workspaces(id) ON DELETE CASCADE")
-        
-        # Create database index on datasets.workspace_id to maximize scoped lookup performance
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_datasets_workspace_id ON datasets(workspace_id);")
-
-        # 4. Create anomaly_explanations table if not exists
-        logger.info("Creating anomaly_explanations table...")
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS anomaly_explanations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-            upload_id VARCHAR(255) NOT NULL,
-            column_name VARCHAR(255) NOT NULL,
-            explanation_text TEXT NOT NULL,
-            chart_data JSON,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        """)
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_anomaly_explanations_workspace_id ON anomaly_explanations(workspace_id);")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_anomaly_explanations_upload_id ON anomaly_explanations(upload_id);")
-
-        # 5. Create analyst_chat_sessions table if not exists
-        logger.info("Creating analyst_chat_sessions table...")
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS analyst_chat_sessions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id VARCHAR(255) NOT NULL,
-            workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-            role VARCHAR(50) NOT NULL,
-            message_text TEXT NOT NULL,
-            chart_hint VARCHAR(50),
-            chart_data JSON,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        """)
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_analyst_chat_sessions_session_id ON analyst_chat_sessions(session_id);")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_analyst_chat_sessions_workspace_id ON analyst_chat_sessions(workspace_id);")
-
-        # 6. Create canvas_comments table if not exists
-        logger.info("Creating canvas_comments table...")
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS canvas_comments (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-            user_email VARCHAR(255) NOT NULL,
-            chart_id VARCHAR(100),
-            comment_text TEXT NOT NULL,
-            x_pos REAL NOT NULL,
-            y_pos REAL NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        """)
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_canvas_comments_workspace_id ON canvas_comments(workspace_id);")
-
-        # 7. Create executive_reports table if not exists
-        logger.info("Creating executive_reports table...")
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS executive_reports (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-            file_path VARCHAR(500) NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        """)
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_executive_reports_workspace_id ON executive_reports(workspace_id);")
-
-        # 8. Create dataset_fingerprints table if not exists
-        logger.info("Creating dataset_fingerprints table...")
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS dataset_fingerprints (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-            upload_id VARCHAR(255) NOT NULL,
-            column_name VARCHAR(255) NOT NULL,
-            mean_value REAL,
-            std_dev_value REAL,
-            cardinality INTEGER NOT NULL,
-            drift_status VARCHAR(50) NOT NULL,
-            p_value REAL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        """)
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_dataset_fingerprints_workspace_id ON dataset_fingerprints(workspace_id);")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_dataset_fingerprints_upload_id ON dataset_fingerprints(upload_id);")
-
-        # 9. Create schema_mappings table if not exists
-        logger.info("Creating schema_mappings table...")
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS schema_mappings (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-            detected_header VARCHAR(255) NOT NULL,
-            mapped_header VARCHAR(255) NOT NULL,
-            confidence_score REAL NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        """)
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_schema_mappings_workspace_id ON schema_mappings(workspace_id);")
-
-        # 10. Create insights table if not exists
-        logger.info("Creating insights table...")
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS insights (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-            upload_id TEXT,
-            narrative_text TEXT NOT NULL,
-            source_type VARCHAR(100) NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        """)
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_insights_workspace_id ON insights(workspace_id);")
-
-        # 11. Create reports table if not exists
-        logger.info("Creating reports table...")
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS reports (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-            file_path TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        """)
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_reports_workspace_id ON reports(workspace_id);")
-
-        # 12. Create templates table if not exists
-        logger.info("Creating templates table...")
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS templates (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name VARCHAR(255) NOT NULL,
-            description TEXT NOT NULL,
-            sample_csv_path VARCHAR(500) NOT NULL,
-            default_config_json TEXT NOT NULL
-        );
-        """)
-
         # Seed templates and create sample CSVs
         templates_dir = os.path.abspath("./storage/templates")
         os.makedirs(templates_dir, exist_ok=True)
@@ -246,7 +161,6 @@ def run_db_migration():
                 f.write("VIS-304,1.00,0.99,0,2026-03-01 11:20:00\n")
                 f.write("VIS-305,0.50,0.60,1,2026-03-01 12:45:00\n")
 
-        # Insert seed rows if empty
         cursor.execute("SELECT name FROM templates;")
         existing_names = [r[0] for r in cursor.fetchall()]
         
@@ -265,46 +179,10 @@ def run_db_migration():
                 """, (name, desc, path, config_json))
 
         conn.commit()
-        
-        # 13. Create learning_progress table if not exists
-        logger.info("Creating learning_progress table...")
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS learning_progress (
-            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            article_id VARCHAR(100) NOT NULL,
-            completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (user_id, article_id)
-        );
-        """)
-        # 14. Create integrations table if not exists
-        logger.info("Creating integrations table...")
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS integrations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-            type VARCHAR(100) NOT NULL,
-            config_json TEXT NOT NULL,
-            is_active INTEGER DEFAULT 1 NOT NULL
-        );
-        """)
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_integrations_workspace_id ON integrations(workspace_id);")
-        conn.commit()
-        
-        # 15. Add last_login_at column to users table if not exists
-        try:
-            logger.info("Altering users table to add last_login_at column...")
-            cursor.execute("ALTER TABLE users ADD COLUMN last_login_at TIMESTAMP;")
-            conn.commit()
-        except sqlite3.OperationalError as op_err:
-            if "duplicate column name" in str(op_err) or "already exists" in str(op_err):
-                logger.info("Column last_login_at already exists in users table.")
-            else:
-                raise
-        
-        logger.info("Database migration completed successfully.")
+        logger.info("Marketplace templates seeded successfully.")
     except Exception as e:
         conn.rollback()
-        logger.error(f"Migration failed: {e}")
+        logger.error(f"Migration / Seeding failed: {e}")
         raise
     finally:
         conn.close()

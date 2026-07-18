@@ -92,8 +92,15 @@ export const WorkspaceProvider = ({ children }: { children: React.ReactNode }) =
         const saved = localStorage.getItem('activeWorkspaceId');
         const savedId = saved && saved !== 'null' ? parseInt(saved, 10) : null;
         const exists = indexed.some((w) => w.id === savedId);
-        if (!exists || savedId === null) {
-          setActiveWorkspaceId(indexed[0].id);
+        const nextId = (exists && savedId !== null) ? savedId : indexed[0].id;
+        
+        const target = indexed.find(w => w.id === nextId);
+        setActiveWorkspaceState(nextId);
+        localStorage.setItem('activeWorkspaceId', String(nextId));
+        if (target && target.dbId) {
+          localStorage.setItem('activeWorkspaceDbId', String(target.dbId));
+        } else {
+          localStorage.setItem('activeWorkspaceDbId', String(nextId));
         }
       }
       return indexed;

@@ -9,6 +9,7 @@ from app.core.database import get_db
 from app.api.deps import get_current_user
 from app.models.user import User
 from app.models.monitor import DatasetFingerprint
+from app.models.workspace import Workspace
 
 router = APIRouter()
 
@@ -36,8 +37,14 @@ async def get_workspace_drift_history(
     GET route returning chronological dataset profile metrics and drift status logs.
     Enforces workspace environment tenancy isolation checking.
     """
-    # Verify lateral access blocks
-    if current_user.workspace_id != workspace_id:
+    # Verify if user has access to this workspace (either as owner or member)
+    stmt = select(Workspace).where(
+        (Workspace.id == workspace_id) &
+        ((Workspace.owner_id == current_user.id) | (current_user.workspace_id == workspace_id))
+    )
+    result = await db.execute(stmt)
+    workspace = result.scalars().first()
+    if not workspace:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Forbidden: Lateral query access blocked. Workspace credentials mismatch."

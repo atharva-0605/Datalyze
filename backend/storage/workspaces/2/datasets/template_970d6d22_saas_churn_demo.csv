@@ -1,6 +1,0 @@
-Customer_ID,Tenure_Months,Monthly_Charges,Total_Charges,Churn_Status,Support_Tickets,Plan_Type
-CUST-001,12,65.0,780.0,No,1,Basic
-CUST-002,3,99.0,297.0,Yes,5,Premium
-CUST-003,24,80.0,1920.0,No,0,Standard
-CUST-004,1,45.0,45.0,Yes,4,Basic
-CUST-005,18,120.0,2160.0,No,2,Premium

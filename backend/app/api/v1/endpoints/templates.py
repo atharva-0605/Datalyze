@@ -45,7 +45,67 @@ async def list_templates(
 ):
     """
     GET route fetching all available system marketplace templates.
+    Synchronizes disk template files into the database catalog first.
     """
+    templates_dir = "storage/templates"
+    if not os.path.exists(templates_dir):
+        templates_dir = "backend/storage/templates"
+
+    TEMPLATES_METADATA = {
+        "student_productivity.csv": {
+            "name": "Student Productivity Template",
+            "description": "Deploys a high-density performance-velocity layout designed to track student milestone time allocation, productivity metrics, and focus velocity streaks.",
+            "default_config_json": '{"growthRate": 0.15, "attritionRate": 0.05, "targetSector": "Productivity"}'
+        },
+        "food_delivery.csv": {
+            "name": "Food Delivery Operations Template",
+            "description": "Deploys a wide-pane logistics overview layout designed to expose fulfillment bottlenecks and regional volume trends.",
+            "default_config_json": '{"growthRate": 0.10, "attritionRate": 0.03, "targetSector": "Logistics"}'
+        },
+        "security_auditor.csv": {
+            "name": "Security Auditor Compliance Template",
+            "description": "Deploys a data-heavy risk and validation auditing board layout designed to highlight system discrepancies.",
+            "default_config_json": '{"growthRate": 0.18, "attritionRate": 0.12, "targetSector": "Compliance"}'
+        },
+        "retail_sales_demo.csv": {
+            "name": "Retail Sales Demo Template",
+            "description": "Deploys a balanced financial monitoring suite mapping regional fiscal streams.",
+            "default_config_json": '{"growthRate": 0.22, "attritionRate": 0.07, "targetSector": "Commercial Revenue"}'
+        },
+        "saas_churn_demo.csv": {
+            "name": "SaaS Enterprise Churn Metrics Template",
+            "description": "Analyze monthly recurring revenue (MRR) structures, customer lifetime value (LTV) anomalies, churn velocity factors, and cohort retention distributions across contract tiers.",
+            "default_config_json": '{"growthRate": 0.25, "attritionRate": 0.08, "targetSector": "SaaS Enterprise"}'
+        }
+    }
+
+    try:
+        if os.path.exists(templates_dir):
+            # Fetch existing
+            res = await db.execute(select(Template))
+            existing_records = res.scalars().all()
+            existing_paths = {os.path.basename(t.sample_csv_path) for t in existing_records}
+            
+            # Scan files and insert missing
+            files = os.listdir(templates_dir)
+            changed = False
+            for file in files:
+                if file.endswith(".csv") and file in TEMPLATES_METADATA:
+                    if file not in existing_paths:
+                        meta = TEMPLATES_METADATA[file]
+                        db_template = Template(
+                            name=meta["name"],
+                            description=meta["description"],
+                            sample_csv_path=os.path.join("storage/templates", file),
+                            default_config_json=meta["default_config_json"]
+                        )
+                        db.add(db_template)
+                        changed = True
+            if changed:
+                await db.commit()
+    except Exception as e:
+        logger.error(f"Failed to synchronize templates from disk to DB: {e}")
+
     stmt = select(Template).order_by(Template.id.asc())
     res = await db.execute(stmt)
     return res.scalars().all()

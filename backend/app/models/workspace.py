@@ -6,7 +6,7 @@ from app.models.base import Base
 class Workspace(Base):
     __tablename__ = "workspaces"
     
-    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(primary_key=True, index=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     owner_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"),
